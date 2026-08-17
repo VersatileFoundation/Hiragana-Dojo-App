@@ -5,7 +5,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # WINDOWS BUILD JOB WITH INNO SETUP
+  # COMPILE STAGE (WINDOWS & MACOS CO-DEPENDENCY RUNNERS)
   # -------------------------------------------------------------
   build-windows:
     runs-on: windows-latest
@@ -19,8 +19,7 @@ jobs:
           node-version: 24
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        run: npm ci
 
       - name: Compile Windows App Folder
         run: |
@@ -31,15 +30,12 @@ jobs:
         run: |
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-      - name: Upload Windows Installer Artifact
+      - name: Upload Windows Asset Cache
         uses: actions/upload-artifact@v4
         with:
-          name: HiraganaDojo-Windows-Setup
+          name: windows-installer
           path: ./installer/hiraganadojoapp-installer.exe
 
-  # -------------------------------------------------------------
-  # MACOS BUILD JOB
-  # -------------------------------------------------------------
   build-mac:
     runs-on: macos-latest
     steps:
@@ -63,8 +59,53 @@ jobs:
           mkdir -p installer
           ditto -c -k --sequesterRsrc --keepParent "./Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app" "./installer/HiraganaDojoApp_Mac.zip"
 
-      - name: Upload macOS App Artifact
+      - name: Upload macOS Asset Cache
         uses: actions/upload-artifact@v4
         with:
-          name: HiraganaDojo-Mac-Zip
+          name: macos-zip
           path: ./installer/HiraganaDojoApp_Mac.zip
+
+  # -------------------------------------------------------------
+  # RELEASE STAGE (CREATES THE NEW DRAFT AND ATTACHES THE FILES)
+  # -------------------------------------------------------------
+  create-draft-release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Grants the runner permissions to write draft changes to your repository
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Windows Asset Cache
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: ./artifacts
+
+      - name: Download macOS Asset Cache
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-zip
+          path: ./artifacts
+
+      - name: Create Release Draft
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true # Forces the state to stay hidden until you personally hit publish
+          prerelease: false
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Hiragana Dojo App v1.0.${{ github.run_number }} (Draft)"
+          body: |
+            ## 🚀 Hiragana Dojo App Deployment
+            Automated production build kiosk distribution packages.
+            
+            ### 🖥️ Native Platform Distribution
+            * **Windows Installer:** Run `hiraganadojoapp-installer.exe` to deploy the application and drop a dedicated desktop shortcut utility.
+            * **macOS Standalone:** Extract `HiraganaDojoApp_Mac.zip` and move your `.app` file payload straight into your Applications directory.
+          files: |
+            ./artifacts/hiraganadojoapp-installer.exe
+            ./artifacts/HiraganaDojoApp_Mac.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
