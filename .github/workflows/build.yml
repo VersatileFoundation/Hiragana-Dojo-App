@@ -1,7 +1,7 @@
 name: Build Kiosk Apps
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from GitHub web panel
 
 jobs:
   # -------------------------------------------------------------
@@ -35,7 +35,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HiraganaDojo-Windows-Setup
-          path: ./installer/HiraganaDojoSetup.exe
+          path: ./installer/hiraganadojoapp-installer.exe
 
   # -------------------------------------------------------------
   # MACOS BUILD JOB
