@@ -12,7 +12,6 @@
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
-; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 AppId={{A6936AEE-2E67-4ECC-807C-F2B57A77CD69}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -31,10 +30,10 @@ PrivilegesRequiredOverridesAllowed=dialog
 SolidCompression=yes
 WizardStyle=modern windows11
 
-; --- FIXED PATHS FOR CLOUD COMPILING ---
-OutputDir={src}\installer
+; --- CLOUD COMPILING FIX USING THE PREPROCESSOR ---
+OutputDir={#SourcePath}\installer
 OutputBaseFilename=hiraganadojoapp-installer
-SetupIconFile={src}\icon.ico
+SetupIconFile={#SourcePath}\icon.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -44,9 +43,9 @@ Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; --- FIXED PATHS FOR CLOUD COMPILING ---
-Source: "{src}\Hiragana Dojo App-win32-x64\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{src}\Hiragana Dojo App-win32-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; --- CLOUD COMPILING FIX USING THE PREPROCESSOR ---
+Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
