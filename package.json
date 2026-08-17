@@ -1,0 +1,11 @@
+{
+  "name": "hiragana-dojo-app",
+  "version": "1.0.0",
+  "main": "main.js",
+  "dependencies": {
+    "electron": "^32.0.0"
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.2"
+  }
+}

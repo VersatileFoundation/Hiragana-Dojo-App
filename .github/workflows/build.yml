@@ -1,0 +1,70 @@
+name: Build Kiosk Apps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # -------------------------------------------------------------
+  # WINDOWS BUILD JOB WITH INNO SETUP
+  # -------------------------------------------------------------
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Compile Windows App Folder
+        run: |
+          npx electron-packager . "Hiragana Dojo App" --platform=win32 --arch=x64 --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.ico --win32metadata.CompanyName="Practice" --win32metadata.FileDescription="Hiragana Dojo Practice Kiosk App" --win32metadata.OriginalFilename="Hiragana Dojo App.exe" --win32metadata.ProductName="Hiragana Dojo App"
+
+      - name: Compile Setup Wizard using Inno Setup
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Upload Windows Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HiraganaDojo-Windows-Setup
+          path: ./installer/HiraganaDojoSetup.exe
+
+  # -------------------------------------------------------------
+  # MACOS BUILD JOB
+  # -------------------------------------------------------------
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Compile macOS App (.app)
+        run: |
+          npx electron-packager . "Hiragana Dojo App" --platform=darwin --arch=universal --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.icns
+
+      - name: Package macOS App into Zip
+        run: |
+          mkdir -p installer
+          ditto -c -k --sequesterRsrc --keepParent "./Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app" "./installer/HiraganaDojoApp_Mac.zip"
+
+      - name: Upload macOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HiraganaDojo-Mac-Zip
+          path: ./installer/HiraganaDojoApp_Mac.zip
