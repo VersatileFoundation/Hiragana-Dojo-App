@@ -1,14 +1,15 @@
-name: Build Kiosk Apps
+name: App Build
 
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub web panel
+  workflow_dispatch:
 
 jobs:
   # -------------------------------------------------------------
-  # COMPILE STAGE (WINDOWS & MACOS CO-DEPENDENCY RUNNERS)
+  # BUILD WINDOWS
   # -------------------------------------------------------------
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,19 +26,39 @@ jobs:
         run: |
           npx electron-packager . "Hiragana Dojo App" --platform=win32 --arch=x64 --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.ico --win32metadata.CompanyName="Practice" --win32metadata.FileDescription="Hiragana Dojo Practice Kiosk App" --win32metadata.OriginalFilename="Hiragana Dojo App.exe" --win32metadata.ProductName="Hiragana Dojo App"
 
+      - name: Create Installer Directory
+        run: mkdir installer
+
+      - name: Create Portable ZIP
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path ".\Hiragana Dojo App-win32-x64\*" `
+            -DestinationPath ".\installer\HiraganaDojoApp_Portable.zip"
+
       - name: Compile Setup Wizard using Inno Setup
         shell: cmd
         run: |
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-      - name: Upload Windows Asset Cache
+      - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
           path: ./installer/hiraganadojoapp-installer.exe
 
+      - name: Upload Windows Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: ./installer/HiraganaDojoApp_Portable.zip
+
+  # -------------------------------------------------------------
+  # BUILD MACOS
+  # -------------------------------------------------------------
   build-mac:
     runs-on: macos-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -50,7 +71,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Compile macOS App (.app)
+      - name: Compile macOS App
         run: |
           npx electron-packager . "Hiragana Dojo App" --platform=darwin --arch=universal --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.icns
 
@@ -66,46 +87,78 @@ jobs:
           path: ./installer/HiraganaDojoApp_Mac.zip
 
   # -------------------------------------------------------------
-  # RELEASE STAGE (CREATES THE NEW DRAFT AND ATTACHES THE FILES)
+  # CREATE GITHUB DRAFT RELEASE
   # -------------------------------------------------------------
   create-draft-release:
-    needs: [build-windows, build-mac]
+    needs:
+      - build-windows
+      - build-mac
+
     runs-on: ubuntu-latest
+
     permissions:
-      contents: write # Grants the runner permissions to write draft changes to your repository
+      contents: write
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download Windows Asset Cache
+      - name: Download Windows Installer
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
           path: ./artifacts
 
-      - name: Download macOS Asset Cache
+      - name: Download Windows Portable
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-portable
+          path: ./artifacts
+
+      - name: Download macOS Build
         uses: actions/download-artifact@v4
         with:
           name: macos-zip
           path: ./artifacts
 
-      - name: Create Release Draft
+      - name: Create Draft Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true # Forces the state to stay hidden until you personally hit publish
+          draft: true
           prerelease: false
           tag_name: v1.0.${{ github.run_number }}
-          name: "Hiragana Dojo App v1.0.${{ github.run_number }} (Draft)"
+          name: Hiragana Dojo App v1.0.${{ github.run_number }} (Draft)
+
           body: |
             ## 🚀 Hiragana Dojo App Deployment
+
             Automated production build kiosk distribution packages.
-            
-            ### 🖥️ Native Platform Distribution
-            * **Windows Installer:** Run `hiraganadojoapp-installer.exe` to deploy the application and drop a dedicated desktop shortcut utility.
-            * **macOS Standalone:** Extract `HiraganaDojoApp_Mac.zip` and move your `.app` file payload straight into your Applications directory.
+
+            ### 🖥️ Windows
+
+            **Installer**
+            - Run `hiraganadojoapp-installer.exe`
+            - Creates shortcuts automatically
+            - Recommended for most users
+
+            **Portable Edition**
+            - Extract `HiraganaDojoApp_Portable.zip`
+            - Launch `Hiragana Dojo App.exe`
+            - No installation required
+            - Can run from USB drives
+
+            ### 🍎 macOS
+
+            **Standalone App**
+            - Extract `HiraganaDojoApp_Mac.zip`
+            - Move the app into Applications
+            - Launch normally
+
           files: |
             ./artifacts/hiraganadojoapp-installer.exe
+            ./artifacts/HiraganaDojoApp_Portable.zip
             ./artifacts/HiraganaDojoApp_Mac.zip
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
