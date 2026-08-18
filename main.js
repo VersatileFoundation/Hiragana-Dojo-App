@@ -1,22 +1,18 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater'); // Manages background updates
 let mainWindow;
+
+// Configure updater options 
+autoUpdater.autoDownload = true; 
+autoUpdater.autoInstallOnAppQuit = true;
 
 app.whenReady().then(() => {
   mainWindow = new BrowserWindow({
     title: "Hiragana Dojo App",
-    
-    // Keeps the standard top title bar visible
     frame: true, 
-    
-    // Disables the minimize functionality completely
     minimizable: false, 
-    
-    // Disables standard full-screen to keep the top bar visible
     fullscreenable: false, 
-    
-    // Forces the window to stay on top of other applications
     alwaysOnTop: true, 
-    
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -24,19 +20,33 @@ app.whenReady().then(() => {
     }
   });
 
-  // Automatically expands the window to take up the whole screen on launch
   mainWindow.maximize();
-
   mainWindow.loadURL('https://hiragana-practice.replit.app/');
 
-  // Optional: Catches OS-level minimize requests (like Windows Key + D) and restores it instantly
+  // Block native minimisation attempts
   mainWindow.on('minimize', (event) => {
     event.preventDefault();
     mainWindow.restore();
   });
+
+  // Check for wrapper updates immediately upon launching
+  autoUpdater.checkForUpdatesAndNotify();
 });
 
-// Ensures Mac behaves normally when quitting
+// Trigger a popup when the new update finishes downloading
+autoUpdater.on('update-downloaded', () => {
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Update Ready',
+    message: 'A new version of Hiragana Dojo is ready. Restart now to apply?',
+    buttons: ['Restart', 'Later']
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall(); // Restarts and applies update
+    }
+  });
+});
+
 app.on('window-all-closed', () => {
   app.quit();
 });
