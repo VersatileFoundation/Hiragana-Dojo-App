@@ -1,28 +1,38 @@
-const { app, BrowserWindow, globalShortcut } = require('electron');
-
+const { app, BrowserWindow } = require('electron');
 let mainWindow;
 
 app.whenReady().then(() => {
   mainWindow = new BrowserWindow({
     title: "Hiragana Dojo App",
-    kiosk: true,                 // Mac native kiosk mode hides dock and menu bar
-    alwaysOnTop: true,
-    fullscreen: true,
-    simpleFullscreen: true,      // Prevents native macOS full-screen animation delays
+    
+    // Keeps the standard top title bar visible
+    frame: true, 
+    
+    // Disables the minimize functionality completely
+    minimizable: false, 
+    
+    // Disables standard full-screen to keep the top bar visible
+    fullscreenable: false, 
+    
+    // Forces the window to stay on top of other applications
+    alwaysOnTop: true, 
+    
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true         
+      webSecurity: true
     }
   });
 
+  // Automatically expands the window to take up the whole screen on launch
+  mainWindow.maximize();
+
   mainWindow.loadURL('https://hiragana-practice.replit.app/');
 
-  // Block default Escape and Function keys from dropping full-screen
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.key === 'F11' || input.key === 'Escape') {
-      event.preventDefault();
-    }
+  // Optional: Catches OS-level minimize requests (like Windows Key + D) and restores it instantly
+  mainWindow.on('minimize', (event) => {
+    event.preventDefault();
+    mainWindow.restore();
   });
 });
 
