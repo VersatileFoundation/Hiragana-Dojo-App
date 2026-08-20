@@ -3,19 +3,49 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 
-// Configure updater
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+// ============================================================
+// BUILD MODE
+// ============================================================
+
+// The GitHub Actions portable build sets this environment variable
+// before packaging the application.
+//
+// Installed version:
+//   updater enabled
+//
+// Portable version:
+//   updater disabled
+//
+const isPortable = process.env.HIRAGANA_PORTABLE === '1';
+
+// ============================================================
+// AUTO UPDATER
+// ============================================================
+
+if (!isPortable) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+}
+
+// ============================================================
+// APP READY
+// ============================================================
 
 app.whenReady().then(() => {
-  // Create a menu with ONLY File
+
+  // ==========================================================
+  // MENU
+  // ==========================================================
+
   const menu = Menu.buildFromTemplate([
     {
       label: 'File',
+
       submenu: [
         {
           label: 'Exit',
           accelerator: 'Alt+F4',
+
           click: () => {
             app.quit();
           }
@@ -26,14 +56,25 @@ app.whenReady().then(() => {
 
   Menu.setApplicationMenu(menu);
 
+  // ==========================================================
+  // CREATE WINDOW
+  // ==========================================================
+
   mainWindow = new BrowserWindow({
+
     title: 'Hiragana Dojo App',
 
-    // Fullscreen kiosk
+    // ========================================================
+    // FULLSCREEN / KIOSK
+    // ========================================================
+
     fullscreen: true,
     kiosk: true,
 
-    // Window restrictions
+    // ========================================================
+    // WINDOW RESTRICTIONS
+    // ========================================================
+
     minimizable: false,
     maximizable: false,
     closable: false,
@@ -41,84 +82,223 @@ app.whenReady().then(() => {
     movable: false,
     fullscreenable: false,
 
-    // Keep frame so menu bar can exist
+    // Keep window frame because the File menu is required.
     frame: true,
 
-    // Always on top
+    // Keep application above normal windows.
     alwaysOnTop: true,
 
-    // Data persistence
+    // ========================================================
+    // WEB PREFERENCES
+    // ========================================================
+
     webPreferences: {
       partition: 'persist:hiraganadojo',
+
       nodeIntegration: false,
+
       contextIsolation: true,
+
       webSecurity: true
     }
   });
 
-  // Force fullscreen kiosk mode
+  // ==========================================================
+  // FORCE KIOSK MODE
+  // ==========================================================
+
   mainWindow.setKiosk(true);
+
+  // ==========================================================
+  // FORCE FULLSCREEN
+  // ==========================================================
+
   mainWindow.setFullScreen(true);
 
-  // Ensure menu bar remains visible
+  // ==========================================================
+  // ALWAYS ON TOP
+  // ==========================================================
+
+  mainWindow.setAlwaysOnTop(true);
+
+  // ==========================================================
+  // MENU BAR
+  // ==========================================================
+
   mainWindow.setAutoHideMenuBar(false);
+
   mainWindow.setMenuBarVisibility(true);
 
-  // Load website
-  mainWindow.loadURL('https://hiragana-practice.replit.app/');
+  // ==========================================================
+  // LOAD WEBSITE
+  // ==========================================================
 
-  // Block minimizing
+  mainWindow.loadURL(
+    'https://hiragana-practice.replit.app/'
+  );
+
+  // ==========================================================
+  // PREVENT MINIMIZING
+  // ==========================================================
+
   mainWindow.on('minimize', (event) => {
+
     event.preventDefault();
-    mainWindow.restore();
+
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.restore();
+
+      mainWindow.focus();
+    }
   });
 
-  // Block attempts to leave fullscreen
+  // ==========================================================
+  // PREVENT LEAVING FULLSCREEN
+  // ==========================================================
+
   mainWindow.on('leave-full-screen', () => {
-    mainWindow.setFullScreen(true);
+
+    if (!mainWindow.isDestroyed()) {
+
+      mainWindow.setKiosk(true);
+
+      mainWindow.setFullScreen(true);
+
+      mainWindow.focus();
+    }
   });
 
-  // Block attempts to exit kiosk mode
+  // ==========================================================
+  // PREVENT LEAVING HTML FULLSCREEN
+  // ==========================================================
+
   mainWindow.on('leave-html-full-screen', () => {
-    mainWindow.setKiosk(true);
+
+    if (!mainWindow.isDestroyed()) {
+
+      mainWindow.setKiosk(true);
+
+      mainWindow.setFullScreen(true);
+
+      mainWindow.focus();
+    }
   });
 
-  // Check for updates
-  autoUpdater.checkForUpdatesAndNotify();
+  // ==========================================================
+  // ENSURE FULLSCREEN AFTER WINDOW IS READY
+  // ==========================================================
+
+  mainWindow.once('ready-to-show', () => {
+
+    if (!mainWindow.isDestroyed()) {
+
+      mainWindow.setKiosk(true);
+
+      mainWindow.setFullScreen(true);
+
+      mainWindow.setAlwaysOnTop(true);
+
+      mainWindow.focus();
+    }
+  });
+
+  // ==========================================================
+  // WINDOW FOCUS
+  // ==========================================================
+
+  mainWindow.on('blur', () => {
+
+    if (!mainWindow.isDestroyed()) {
+
+      // Reassert kiosk/fullscreen state when focus is lost.
+      mainWindow.setKiosk(true);
+
+      mainWindow.setFullScreen(true);
+    }
+  });
+
+  // ==========================================================
+  // AUTO UPDATE
+  // ==========================================================
+
+  if (!isPortable) {
+
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 });
 
-// Update downloaded notification
+// ============================================================
+// UPDATE DOWNLOADED
+// ============================================================
+
 autoUpdater.on('update-downloaded', () => {
+
+  // Portable builds never update automatically.
+  if (isPortable) {
+    return;
+  }
+
   dialog.showMessageBox({
+
     type: 'info',
+
     title: 'Update Ready',
-    message: 'A new version of Hiragana Dojo is ready. Restart now to apply?',
-    buttons: ['Restart', 'Later']
+
+    message:
+      'A new version of Hiragana Dojo is ready. Restart now to apply?',
+
+    buttons: [
+      'Restart',
+      'Later'
+    ]
+
   }).then((result) => {
+
     if (result.response === 0) {
+
       autoUpdater.quitAndInstall();
     }
   });
 });
 
-// Logging
+// ============================================================
+// AUTO UPDATE LOGGING
+// ============================================================
+
 autoUpdater.on('error', (err) => {
-  console.error('AutoUpdater Error:', err);
+
+  console.error(
+    'AutoUpdater Error:',
+    err
+  );
 });
 
 autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for updates...');
+
+  console.log(
+    'Checking for updates...'
+  );
 });
 
 autoUpdater.on('update-available', () => {
-  console.log('Update available.');
+
+  console.log(
+    'Update available.'
+  );
 });
 
 autoUpdater.on('update-not-available', () => {
-  console.log('No updates available.');
+
+  console.log(
+    'No updates available.'
+  );
 });
 
-// Quit only through File > Exit or update installer
+// ============================================================
+// APP CLOSE
+// ============================================================
+
 app.on('window-all-closed', () => {
+
   app.quit();
 });

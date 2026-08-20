@@ -12,51 +12,179 @@
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
 
 [Setup]
+
 AppId={{A6936AEE-2E67-4ECC-807C-F2B57A77CD69}
+
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
+
+; ------------------------------------------------------------
+; INSTALL LOCATION
+; ------------------------------------------------------------
+
 DefaultDirName={autopf}\{#MyAppName}
+
+DefaultGroupName={#MyAppName}
+
+; ------------------------------------------------------------
+; UNINSTALL
+; ------------------------------------------------------------
+
 UninstallDisplayIcon={app}\{#MyAppExeName}
+
+; ------------------------------------------------------------
+; WINDOWS ARCHITECTURE
+; ------------------------------------------------------------
+
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+
+; ------------------------------------------------------------
+; FILE ASSOCIATIONS
+; ------------------------------------------------------------
+
 ChangesAssociations=yes
-DefaultGroupName={#MyAppName}
+
+; ------------------------------------------------------------
+; SHORTCUTS
+; ------------------------------------------------------------
+
 AllowNoIcons=yes
+
+; ------------------------------------------------------------
+; ADMINISTRATOR PRIVILEGES
+; ------------------------------------------------------------
+
+; The INSTALLER requires administrator privileges because
+; the default installation directory is Program Files.
+
+PrivilegesRequired=admin
+
+; Allow the user to choose a per-user installation instead.
 PrivilegesRequiredOverridesAllowed=dialog
+
+; ------------------------------------------------------------
+; COMPRESSION / UI
+; ------------------------------------------------------------
+
 SolidCompression=yes
+
 WizardStyle=modern windows11
 
-; --- CLOUD COMPILING FIX USING THE PREPROCESSOR ---
+; ------------------------------------------------------------
+; CLOUD COMPILING
+; ------------------------------------------------------------
+
 OutputDir={#SourcePath}\installer
+
 OutputBaseFilename=hiraganadojoapp-installer
+
 SetupIconFile={#SourcePath}\icon.ico
 
+
 [Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
+
+Name: "english"; \
+    MessagesFile: "compiler:Default.isl"
+
+Name: "japanese"; \
+    MessagesFile: "compiler:Languages\Japanese.isl"
+
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+Name: "desktopicon"; \
+    Description: "{cm:CreateDesktopIcon}"; \
+    GroupDescription: "{cm:AdditionalIcons}"; \
+    Flags: unchecked
+
 
 [Files]
-; --- CLOUD COMPILING FIX USING THE PREPROCESSOR ---
-Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ------------------------------------------------------------
+; ELECTRON APPLICATION
+; ------------------------------------------------------------
+
+; Main executable
+Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\{#MyAppExeName}"; \
+    DestDir: "{app}"; \
+    Flags: ignoreversion
+
+; Everything else required by Electron
+Source: "{#SourcePath}\Hiragana Dojo App-win32-x64\*"; \
+    DestDir: "{app}"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
+
 
 [Registry]
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; ValueType: string; ValueName: "{#MyAppAssocKey}"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}"; ValueType: string; ValueName: ""; ValueData: "{#MyAppAssocName}"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
+; ------------------------------------------------------------
+; FILE ASSOCIATION
+; ------------------------------------------------------------
+
+Root: HKA; \
+    Subkey: "Software\Classes\{#MyAppAssocExt}\OpenWithProgids"; \
+    ValueType: string; \
+    ValueName: "{#MyAppAssocKey}"; \
+    ValueData: ""; \
+    Flags: uninsdeletevalue
+
+Root: HKA; \
+    Subkey: "Software\Classes\{#MyAppAssocKey}"; \
+    ValueType: string; \
+    ValueName: ""; \
+    ValueData: "{#MyAppAssocName}"; \
+    Flags: uninsdeletekey
+
+Root: HKA; \
+    Subkey: "Software\Classes\{#MyAppAssocKey}\DefaultIcon"; \
+    ValueType: string; \
+    ValueName: ""; \
+    ValueData: "{app}\{#MyAppExeName},0"
+
+Root: HKA; \
+    Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; \
+    ValueType: string; \
+    ValueName: ""; \
+    ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+; ------------------------------------------------------------
+; START MENU
+; ------------------------------------------------------------
+
+Name: "{group}\{#MyAppName}"; \
+    Filename: "{app}\{#MyAppExeName}"
+
+; ------------------------------------------------------------
+; UNINSTALL SHORTCUT
+; ------------------------------------------------------------
+
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; \
+    Filename: "{uninstallexe}"
+
+; ------------------------------------------------------------
+; DESKTOP SHORTCUT
+; ------------------------------------------------------------
+
+Name: "{autodesktop}\{#MyAppName}"; \
+    Filename: "{app}\{#MyAppExeName}"; \
+    Tasks: desktopicon
+
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+; ------------------------------------------------------------
+; LAUNCH AFTER INSTALL
+; ------------------------------------------------------------
+
+Filename: "{app}\{#MyAppExeName}"; \
+    Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; \
+    Flags: nowait postinstall skipifsilent

@@ -1,164 +1,478 @@
-name: App Build
+name: Build Hiragana Dojo App
 
 on:
+  push:
+    branches:
+      - main
+
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  # -------------------------------------------------------------
-  # BUILD WINDOWS
-  # -------------------------------------------------------------
+
+  # ============================================================
+  # WINDOWS BUILD
+  # ============================================================
+
   build-windows:
+
+    name: Build Windows
+
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Code
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # NODE
+      # --------------------------------------------------------
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
-        with:
-          node-version: 24
 
-      - name: Install Dependencies
+        with:
+          node-version: 20
+          cache: npm
+
+      # --------------------------------------------------------
+      # DEPENDENCIES
+      # --------------------------------------------------------
+
+      - name: Install dependencies
         run: npm ci
 
-      - name: Compile Windows App Folder
-        run: |
-          npx electron-packager . "Hiragana Dojo App" --platform=win32 --arch=x64 --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.ico --win32metadata.CompanyName="Practice" --win32metadata.FileDescription="Hiragana Dojo Practice Kiosk App" --win32metadata.OriginalFilename="Hiragana Dojo App.exe" --win32metadata.ProductName="Hiragana Dojo App"
+      # --------------------------------------------------------
+      # BUILD ELECTRON WINDOWS APPLICATION
+      # --------------------------------------------------------
 
-      - name: Create Installer Directory
-        run: mkdir installer
+      - name: Build Windows Electron App
+
+        shell: pwsh
+
+        run: |
+
+          npx electron-packager . "Hiragana Dojo App" `
+            --platform=win32 `
+            --arch=x64 `
+            --electron-version=32.0.0 `
+            --app-version=1.0.0 `
+            --overwrite `
+            --icon=icon.ico
+
+      # --------------------------------------------------------
+      # LOCATE EXE
+      # --------------------------------------------------------
+
+      - name: Locate Windows executable
+
+        shell: pwsh
+
+        run: |
+
+          $exe =
+            "Hiragana Dojo App-win32-x64\Hiragana Dojo App.exe"
+
+          if (!(Test-Path $exe)) {
+
+            Write-Error `
+              "Windows executable not found: $exe"
+
+            exit 1
+          }
+
+          Write-Host "Found:"
+          Write-Host $exe
+
+      # --------------------------------------------------------
+      # SET NO-ADMIN EXECUTION LEVEL
+      # --------------------------------------------------------
+
+      - name: Configure Windows executable
+
+        shell: pwsh
+
+        run: |
+
+          $exe =
+            "Hiragana Dojo App-win32-x64\Hiragana Dojo App.exe"
+
+          Write-Host `
+            "Setting requested execution level to asInvoker..."
+
+          npx rcedit "$exe" `
+            --set-requested-execution-level asInvoker
+
+          if ($LASTEXITCODE -ne 0) {
+
+            Write-Error `
+              "rcedit failed."
+
+            exit $LASTEXITCODE
+          }
+
+          Write-Host `
+            "Windows executable configured successfully."
+
+      # --------------------------------------------------------
+      # CREATE PORTABLE ENVIRONMENT FILE
+      # --------------------------------------------------------
+
+      - name: Configure portable edition
+
+        shell: pwsh
+
+        run: |
+
+          $resources =
+            "Hiragana Dojo App-win32-x64\resources"
+
+          $config =
+            "$resources\portable-mode.txt"
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path $resources | Out-Null
+
+          Set-Content `
+            -Path $config `
+            -Value "HIRAGANA_PORTABLE=1" `
+            -Encoding UTF8
+
+      # --------------------------------------------------------
+      # IMPORTANT:
+      # Electron itself does not automatically read that file as
+      # an environment variable.
+      #
+      # Therefore the application will still run correctly even
+      # without this variable. The portable edition does not
+      # require administrator rights.
+      # --------------------------------------------------------
+
+      # --------------------------------------------------------
+      # CREATE PORTABLE ZIP
+      # --------------------------------------------------------
 
       - name: Create Portable ZIP
-        shell: powershell
+
+        shell: pwsh
+
         run: |
+
+          if (Test-Path "HiraganaDojoApp_Portable.zip") {
+
+            Remove-Item `
+              "HiraganaDojoApp_Portable.zip" `
+              -Force
+          }
+
           Compress-Archive `
-            -Path ".\Hiragana Dojo App-win32-x64\*" `
-            -DestinationPath ".\installer\HiraganaDojoApp_Portable.zip"
+            -Path "Hiragana Dojo App-win32-x64\*" `
+            -DestinationPath "HiraganaDojoApp_Portable.zip" `
+            -CompressionLevel Optimal `
+            -Force
 
-      - name: Compile Setup Wizard using Inno Setup
-        shell: cmd
+          Write-Host `
+            "Portable ZIP created."
+
+      # --------------------------------------------------------
+      # INSTALL INNO SETUP
+      # --------------------------------------------------------
+
+      - name: Install Inno Setup
+
+        shell: pwsh
+
         run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-      - name: Upload Windows Installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: ./installer/hiraganadojoapp-installer.exe
+          choco install innosetup -y
+
+      # --------------------------------------------------------
+      # BUILD INSTALLER
+      # --------------------------------------------------------
+
+      - name: Build Windows Installer
+
+        shell: pwsh
+
+        run: |
+
+          $iscc =
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+          if (!(Test-Path $iscc)) {
+
+            Write-Error `
+              "Inno Setup compiler not found."
+
+            exit 1
+          }
+
+          & $iscc installer.iss
+
+          if ($LASTEXITCODE -ne 0) {
+
+            Write-Error `
+              "Inno Setup build failed."
+
+            exit $LASTEXITCODE
+          }
+
+      # --------------------------------------------------------
+      # SHOW OUTPUT
+      # --------------------------------------------------------
+
+      - name: Show Windows output
+
+        shell: pwsh
+
+        run: |
+
+          Write-Host "Portable:"
+          Get-Item `
+            "HiraganaDojoApp_Portable.zip"
+
+          Write-Host ""
+          Write-Host "Installer:"
+
+          Get-ChildItem `
+            -Path Output `
+            -Filter *.exe
+
+      # --------------------------------------------------------
+      # UPLOAD PORTABLE
+      # --------------------------------------------------------
 
       - name: Upload Windows Portable
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-portable
-          path: ./installer/HiraganaDojoApp_Portable.zip
 
-  # -------------------------------------------------------------
-  # BUILD MACOS
-  # -------------------------------------------------------------
-  build-mac:
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: Hiragana-Dojo-Windows-Portable
+
+          path: HiraganaDojoApp_Portable.zip
+
+      # --------------------------------------------------------
+      # UPLOAD INSTALLER
+      # --------------------------------------------------------
+
+      - name: Upload Windows Installer
+
+        uses: actions/upload-artifact@v4
+
+        with:
+
+          name: Hiragana-Dojo-Windows-Installer
+
+          path: Output/*.exe
+
+
+  # ============================================================
+  # MACOS BUILD
+  # ============================================================
+
+  build-macos:
+
+    name: Build macOS
+
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Code
+
+      # --------------------------------------------------------
+      # CHECKOUT
+      # --------------------------------------------------------
+
+      - name: Checkout repository
+
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
+      # --------------------------------------------------------
+      # NODE
+      # --------------------------------------------------------
 
-      - name: Install Dependencies
+      - name: Setup Node.js
+
+        uses: actions/setup-node@v4
+
+        with:
+          node-version: 20
+          cache: npm
+
+      # --------------------------------------------------------
+      # DEPENDENCIES
+      # --------------------------------------------------------
+
+      - name: Install dependencies
+
         run: npm ci
 
-      - name: Compile macOS App
-        run: |
-          npx electron-packager . "Hiragana Dojo App" --platform=darwin --arch=universal --electron-version=32.0.0 --app-version=1.0.0 --overwrite --icon=icon.icns
+      # --------------------------------------------------------
+      # BUILD UNIVERSAL MACOS APP
+      # --------------------------------------------------------
 
-      - name: Package macOS App into Zip
-        run: |
-          mkdir -p installer
-          ditto -c -k --sequesterRsrc --keepParent "./Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app" "./installer/HiraganaDojoApp_Mac.zip"
+      - name: Build macOS Universal App
 
-      - name: Upload macOS Asset Cache
+        run: |
+
+          npx electron-packager . "Hiragana Dojo App" \
+            --platform=darwin \
+            --arch=universal \
+            --electron-version=32.0.0 \
+            --app-version=1.0.0 \
+            --overwrite \
+            --icon=icon.icns
+
+      # --------------------------------------------------------
+      # VERIFY APP
+      # --------------------------------------------------------
+
+      - name: Verify macOS app
+
+        run: |
+
+          if [ ! -d \
+            "Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app"
+          ]; then
+
+            echo "macOS application was not created."
+
+            exit 1
+
+          fi
+
+      # --------------------------------------------------------
+      # CREATE MACOS ZIP
+      # --------------------------------------------------------
+
+      - name: Create macOS ZIP
+
+        run: |
+
+          ditto \
+            -c \
+            -k \
+            --sequesterRsrc \
+            --keepParent \
+            "Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app" \
+            "HiraganaDojoApp_Mac.zip"
+
+      # --------------------------------------------------------
+      # UPLOAD MACOS
+      # --------------------------------------------------------
+
+      - name: Upload macOS App
+
         uses: actions/upload-artifact@v4
-        with:
-          name: macos-zip
-          path: ./installer/HiraganaDojoApp_Mac.zip
 
-  # -------------------------------------------------------------
-  # CREATE GITHUB DRAFT RELEASE
-  # -------------------------------------------------------------
-  create-draft-release:
+        with:
+
+          name: Hiragana-Dojo-macOS
+
+          path: HiraganaDojoApp_Mac.zip
+
+
+  # ============================================================
+  # GITHUB RELEASE
+  # ============================================================
+
+  release:
+
+    name: Create GitHub Release
+
     needs:
       - build-windows
-      - build-mac
+      - build-macos
 
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
 
-      - name: Download Windows Installer
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
-          path: ./artifacts
+      # --------------------------------------------------------
+      # DOWNLOAD WINDOWS PORTABLE
+      # --------------------------------------------------------
 
       - name: Download Windows Portable
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-portable
-          path: ./artifacts
 
-      - name: Download macOS Build
         uses: actions/download-artifact@v4
-        with:
-          name: macos-zip
-          path: ./artifacts
 
-      - name: Create Draft Release
-        id: create_release
+        with:
+
+          name: Hiragana-Dojo-Windows-Portable
+
+          path: release/windows-portable
+
+      # --------------------------------------------------------
+      # DOWNLOAD WINDOWS INSTALLER
+      # --------------------------------------------------------
+
+      - name: Download Windows Installer
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: Hiragana-Dojo-Windows-Installer
+
+          path: release/windows-installer
+
+      # --------------------------------------------------------
+      # DOWNLOAD MACOS
+      # --------------------------------------------------------
+
+      - name: Download macOS
+
+        uses: actions/download-artifact@v4
+
+        with:
+
+          name: Hiragana-Dojo-macOS
+
+          path: release/macos
+
+      # --------------------------------------------------------
+      # SHOW FILES
+      # --------------------------------------------------------
+
+      - name: Show release files
+
+        run: |
+
+          find release -type f -print
+
+      # --------------------------------------------------------
+      # CREATE RELEASE
+      # --------------------------------------------------------
+
+      - name: Create GitHub Release
+
         uses: softprops/action-gh-release@v2
+
         with:
-          draft: true
-          prerelease: false
-          tag_name: v1.0.${{ github.run_number }}
-          name: Hiragana Dojo App v1.0.${{ github.run_number }} (Draft)
 
-          body: |
-            ## 🚀 Hiragana Dojo App Deployment
+          tag_name: v${{ github.run_number }}
 
-            Automated production build kiosk distribution packages.
+          name: Hiragana Dojo App v${{ github.run_number }}
 
-            ### 🖥️ Windows
-
-            **Installer**
-            - Run `hiraganadojoapp-installer.exe`
-            - Creates shortcuts automatically
-            - Recommended for most users
-
-            **Portable Edition**
-            - Extract `HiraganaDojoApp_Portable.zip`
-            - Launch `Hiragana Dojo App.exe`
-            - No installation required
-            - Can run from USB drives
-
-            ### 🍎 macOS
-
-            **Standalone App**
-            - Extract `HiraganaDojoApp_Mac.zip`
-            - Move the app into Applications
-            - Launch normally
+          generate_release_notes: true
 
           files: |
-            ./artifacts/hiraganadojoapp-installer.exe
-            ./artifacts/HiraganaDojoApp_Portable.zip
-            ./artifacts/HiraganaDojoApp_Mac.zip
+
+            release/windows-portable/*.zip
+
+            release/windows-installer/*.exe
+
+            release/macos/*.zip
 
         env:
+
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
