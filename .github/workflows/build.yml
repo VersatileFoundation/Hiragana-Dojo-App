@@ -13,7 +13,7 @@ permissions:
 jobs:
 
   # ============================================================
-  # WINDOWS BUILD
+  # WINDOWS
   # ============================================================
 
   build-windows:
@@ -29,28 +29,34 @@ jobs:
       # --------------------------------------------------------
 
       - name: Checkout repository
+
         uses: actions/checkout@v4
 
+
       # --------------------------------------------------------
-      # NODE
+      # NODE.JS
       # --------------------------------------------------------
 
       - name: Setup Node.js
+
         uses: actions/setup-node@v4
 
         with:
           node-version: 20
           cache: npm
 
+
       # --------------------------------------------------------
-      # DEPENDENCIES
+      # INSTALL DEPENDENCIES
       # --------------------------------------------------------
 
       - name: Install dependencies
+
         run: npm ci
 
+
       # --------------------------------------------------------
-      # BUILD ELECTRON WINDOWS APPLICATION
+      # BUILD WINDOWS ELECTRON APPLICATION
       # --------------------------------------------------------
 
       - name: Build Windows Electron App
@@ -65,13 +71,19 @@ jobs:
             --electron-version=32.0.0 `
             --app-version=1.0.0 `
             --overwrite `
-            --icon=icon.ico
+            --icon=icon.ico `
+            --win32metadata.CompanyName="Versatile Foundation" `
+            --win32metadata.FileDescription="Hiragana Dojo Practice Kiosk App" `
+            --win32metadata.OriginalFilename="Hiragana Dojo App.exe" `
+            --win32metadata.ProductName="Hiragana Dojo App" `
+            --win32metadata.requested-execution-level="asInvoker"
+
 
       # --------------------------------------------------------
-      # LOCATE EXE
+      # VERIFY WINDOWS EXECUTABLE
       # --------------------------------------------------------
 
-      - name: Locate Windows executable
+      - name: Verify Windows executable
 
         shell: pwsh
 
@@ -83,85 +95,24 @@ jobs:
           if (!(Test-Path $exe)) {
 
             Write-Error `
-              "Windows executable not found: $exe"
+              "Windows executable was not created."
 
             exit 1
           }
 
-          Write-Host "Found:"
+          Write-Host ""
+          Write-Host "Windows executable created:"
           Write-Host $exe
+          Write-Host ""
 
-      # --------------------------------------------------------
-      # SET NO-ADMIN EXECUTION LEVEL
-      # --------------------------------------------------------
+          Get-Item $exe
 
-      - name: Configure Windows executable
-
-        shell: pwsh
-
-        run: |
-
-          $exe =
-            "Hiragana Dojo App-win32-x64\Hiragana Dojo App.exe"
-
-          Write-Host `
-            "Setting requested execution level to asInvoker..."
-
-          npx rcedit "$exe" `
-            --set-requested-execution-level asInvoker
-
-          if ($LASTEXITCODE -ne 0) {
-
-            Write-Error `
-              "rcedit failed."
-
-            exit $LASTEXITCODE
-          }
-
-          Write-Host `
-            "Windows executable configured successfully."
-
-      # --------------------------------------------------------
-      # CREATE PORTABLE ENVIRONMENT FILE
-      # --------------------------------------------------------
-
-      - name: Configure portable edition
-
-        shell: pwsh
-
-        run: |
-
-          $resources =
-            "Hiragana Dojo App-win32-x64\resources"
-
-          $config =
-            "$resources\portable-mode.txt"
-
-          New-Item `
-            -ItemType Directory `
-            -Force `
-            -Path $resources | Out-Null
-
-          Set-Content `
-            -Path $config `
-            -Value "HIRAGANA_PORTABLE=1" `
-            -Encoding UTF8
-
-      # --------------------------------------------------------
-      # IMPORTANT:
-      # Electron itself does not automatically read that file as
-      # an environment variable.
-      #
-      # Therefore the application will still run correctly even
-      # without this variable. The portable edition does not
-      # require administrator rights.
-      # --------------------------------------------------------
 
       # --------------------------------------------------------
       # CREATE PORTABLE ZIP
       # --------------------------------------------------------
 
-      - name: Create Portable ZIP
+      - name: Create Windows Portable ZIP
 
         shell: pwsh
 
@@ -180,8 +131,10 @@ jobs:
             -CompressionLevel Optimal `
             -Force
 
-          Write-Host `
-            "Portable ZIP created."
+          Write-Host ""
+          Write-Host "Portable ZIP created."
+          Write-Host ""
+
 
       # --------------------------------------------------------
       # INSTALL INNO SETUP
@@ -194,6 +147,7 @@ jobs:
         run: |
 
           choco install innosetup -y
+
 
       # --------------------------------------------------------
       # BUILD INSTALLER
@@ -211,41 +165,50 @@ jobs:
           if (!(Test-Path $iscc)) {
 
             Write-Error `
-              "Inno Setup compiler not found."
+              "Inno Setup compiler was not found."
 
             exit 1
           }
 
-          & $iscc installer.iss
+          & $iscc "installer.iss"
 
           if ($LASTEXITCODE -ne 0) {
 
             Write-Error `
-              "Inno Setup build failed."
+              "Inno Setup compilation failed."
 
             exit $LASTEXITCODE
           }
 
+
       # --------------------------------------------------------
-      # SHOW OUTPUT
+      # VERIFY INSTALLER
       # --------------------------------------------------------
 
-      - name: Show Windows output
+      - name: Verify Windows Installer
 
         shell: pwsh
 
         run: |
 
-          Write-Host "Portable:"
-          Get-Item `
-            "HiraganaDojoApp_Portable.zip"
+          $installer =
+            "installer\hiraganadojoapp-installer.exe"
+
+          if (!(Test-Path $installer)) {
+
+            Write-Error `
+              "Installer was not created: $installer"
+
+            exit 1
+          }
 
           Write-Host ""
-          Write-Host "Installer:"
+          Write-Host "Installer created:"
+          Write-Host $installer
+          Write-Host ""
 
-          Get-ChildItem `
-            -Path Output `
-            -Filter *.exe
+          Get-Item $installer
+
 
       # --------------------------------------------------------
       # UPLOAD PORTABLE
@@ -261,6 +224,7 @@ jobs:
 
           path: HiraganaDojoApp_Portable.zip
 
+
       # --------------------------------------------------------
       # UPLOAD INSTALLER
       # --------------------------------------------------------
@@ -273,11 +237,11 @@ jobs:
 
           name: Hiragana-Dojo-Windows-Installer
 
-          path: Output/*.exe
+          path: installer/hiraganadojoapp-installer.exe
 
 
   # ============================================================
-  # MACOS BUILD
+  # MACOS
   # ============================================================
 
   build-macos:
@@ -296,8 +260,9 @@ jobs:
 
         uses: actions/checkout@v4
 
+
       # --------------------------------------------------------
-      # NODE
+      # NODE.JS
       # --------------------------------------------------------
 
       - name: Setup Node.js
@@ -308,13 +273,15 @@ jobs:
           node-version: 20
           cache: npm
 
+
       # --------------------------------------------------------
-      # DEPENDENCIES
+      # INSTALL DEPENDENCIES
       # --------------------------------------------------------
 
       - name: Install dependencies
 
         run: npm ci
+
 
       # --------------------------------------------------------
       # BUILD UNIVERSAL MACOS APP
@@ -332,8 +299,9 @@ jobs:
             --overwrite \
             --icon=icon.icns
 
+
       # --------------------------------------------------------
-      # VERIFY APP
+      # VERIFY MACOS APP
       # --------------------------------------------------------
 
       - name: Verify macOS app
@@ -350,6 +318,7 @@ jobs:
 
           fi
 
+
       # --------------------------------------------------------
       # CREATE MACOS ZIP
       # --------------------------------------------------------
@@ -365,6 +334,7 @@ jobs:
             --keepParent \
             "Hiragana Dojo App-darwin-universal/Hiragana Dojo App.app" \
             "HiraganaDojoApp_Mac.zip"
+
 
       # --------------------------------------------------------
       # UPLOAD MACOS
@@ -398,7 +368,7 @@ jobs:
     steps:
 
       # --------------------------------------------------------
-      # DOWNLOAD WINDOWS PORTABLE
+      # WINDOWS PORTABLE
       # --------------------------------------------------------
 
       - name: Download Windows Portable
@@ -411,8 +381,9 @@ jobs:
 
           path: release/windows-portable
 
+
       # --------------------------------------------------------
-      # DOWNLOAD WINDOWS INSTALLER
+      # WINDOWS INSTALLER
       # --------------------------------------------------------
 
       - name: Download Windows Installer
@@ -425,8 +396,9 @@ jobs:
 
           path: release/windows-installer
 
+
       # --------------------------------------------------------
-      # DOWNLOAD MACOS
+      # MACOS
       # --------------------------------------------------------
 
       - name: Download macOS
@@ -439,8 +411,9 @@ jobs:
 
           path: release/macos
 
+
       # --------------------------------------------------------
-      # SHOW FILES
+      # SHOW RELEASE FILES
       # --------------------------------------------------------
 
       - name: Show release files
@@ -449,8 +422,9 @@ jobs:
 
           find release -type f -print
 
+
       # --------------------------------------------------------
-      # CREATE RELEASE
+      # CREATE GITHUB RELEASE
       # --------------------------------------------------------
 
       - name: Create GitHub Release

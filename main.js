@@ -4,34 +4,37 @@ const { autoUpdater } = require('electron-updater');
 let mainWindow;
 
 // ============================================================
-// BUILD MODE
+// APP CONFIGURATION
 // ============================================================
 
-// The GitHub Actions portable build sets this environment variable
-// before packaging the application.
-//
-// Installed version:
-//   updater enabled
-//
-// Portable version:
-//   updater disabled
-//
-const isPortable = process.env.HIRAGANA_PORTABLE === '1';
+app.commandLine.appendSwitch('disable-features', 'msWindowsTaskbar');
 
 // ============================================================
 // AUTO UPDATER
 // ============================================================
+//
+// The portable edition produced by Electron Packager does not
+// have an installer/updater mechanism. The application therefore
+// only attempts automatic updates when an installed version is
+// explicitly configured to allow them.
+//
+// Set HIRAGANA_DOJO_DISABLE_UPDATES=1 to disable updates.
+//
+// ============================================================
 
-if (!isPortable) {
+const disableUpdates =
+  process.env.HIRAGANA_DOJO_DISABLE_UPDATES === '1';
+
+if (!disableUpdates) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 }
 
 // ============================================================
-// APP READY
+// CREATE WINDOW
 // ============================================================
 
-app.whenReady().then(() => {
+function createWindow() {
 
   // ==========================================================
   // MENU
@@ -44,6 +47,7 @@ app.whenReady().then(() => {
       submenu: [
         {
           label: 'Exit',
+
           accelerator: 'Alt+F4',
 
           click: () => {
@@ -57,7 +61,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(menu);
 
   // ==========================================================
-  // CREATE WINDOW
+  // BROWSER WINDOW
   // ==========================================================
 
   mainWindow = new BrowserWindow({
@@ -65,10 +69,15 @@ app.whenReady().then(() => {
     title: 'Hiragana Dojo App',
 
     // ========================================================
-    // FULLSCREEN / KIOSK
+    // FULLSCREEN
     // ========================================================
 
     fullscreen: true,
+
+    // ========================================================
+    // KIOSK
+    // ========================================================
+
     kiosk: true,
 
     // ========================================================
@@ -76,16 +85,21 @@ app.whenReady().then(() => {
     // ========================================================
 
     minimizable: false,
+
     maximizable: false,
+
     closable: false,
+
     resizable: false,
+
     movable: false,
+
     fullscreenable: false,
 
-    // Keep window frame because the File menu is required.
+    // Keep frame so File menu remains available.
     frame: true,
 
-    // Keep application above normal windows.
+    // Keep the application above normal windows.
     alwaysOnTop: true,
 
     // ========================================================
@@ -93,6 +107,7 @@ app.whenReady().then(() => {
     // ========================================================
 
     webPreferences: {
+
       partition: 'persist:hiraganadojo',
 
       nodeIntegration: false,
@@ -104,16 +119,16 @@ app.whenReady().then(() => {
   });
 
   // ==========================================================
-  // FORCE KIOSK MODE
-  // ==========================================================
-
-  mainWindow.setKiosk(true);
-
-  // ==========================================================
   // FORCE FULLSCREEN
   // ==========================================================
 
   mainWindow.setFullScreen(true);
+
+  // ==========================================================
+  // FORCE KIOSK
+  // ==========================================================
+
+  mainWindow.setKiosk(true);
 
   // ==========================================================
   // ALWAYS ON TOP
@@ -146,7 +161,12 @@ app.whenReady().then(() => {
     event.preventDefault();
 
     if (!mainWindow.isDestroyed()) {
+
       mainWindow.restore();
+
+      mainWindow.setKiosk(true);
+
+      mainWindow.setFullScreen(true);
 
       mainWindow.focus();
     }
@@ -185,7 +205,7 @@ app.whenReady().then(() => {
   });
 
   // ==========================================================
-  // ENSURE FULLSCREEN AFTER WINDOW IS READY
+  // READY
   // ==========================================================
 
   mainWindow.once('ready-to-show', () => {
@@ -206,11 +226,10 @@ app.whenReady().then(() => {
   // WINDOW FOCUS
   // ==========================================================
 
-  mainWindow.on('blur', () => {
+  mainWindow.on('focus', () => {
 
     if (!mainWindow.isDestroyed()) {
 
-      // Reassert kiosk/fullscreen state when focus is lost.
       mainWindow.setKiosk(true);
 
       mainWindow.setFullScreen(true);
@@ -218,13 +237,33 @@ app.whenReady().then(() => {
   });
 
   // ==========================================================
-  // AUTO UPDATE
+  // UPDATE CHECK
   // ==========================================================
 
-  if (!isPortable) {
+  if (!disableUpdates) {
 
-    autoUpdater.checkForUpdatesAndNotify();
+    try {
+
+      autoUpdater.checkForUpdatesAndNotify();
+
+    } catch (error) {
+
+      console.error(
+        'Unable to check for updates:',
+        error
+      );
+    }
   }
+}
+
+// ============================================================
+// ELECTRON READY
+// ============================================================
+
+app.whenReady().then(() => {
+
+  createWindow();
+
 });
 
 // ============================================================
@@ -233,8 +272,7 @@ app.whenReady().then(() => {
 
 autoUpdater.on('update-downloaded', () => {
 
-  // Portable builds never update automatically.
-  if (isPortable) {
+  if (disableUpdates) {
     return;
   }
 
@@ -262,14 +300,14 @@ autoUpdater.on('update-downloaded', () => {
 });
 
 // ============================================================
-// AUTO UPDATE LOGGING
+// AUTO UPDATE EVENTS
 // ============================================================
 
-autoUpdater.on('error', (err) => {
+autoUpdater.on('error', (error) => {
 
   console.error(
     'AutoUpdater Error:',
-    err
+    error
   );
 });
 
@@ -295,7 +333,7 @@ autoUpdater.on('update-not-available', () => {
 });
 
 // ============================================================
-// APP CLOSE
+// APP EVENTS
 // ============================================================
 
 app.on('window-all-closed', () => {
