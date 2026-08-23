@@ -2,7 +2,7 @@
   "name": "hiragana-dojo-app",
   "productName": "Hiragana Dojo App",
   "version": "1.0.0",
-  "description": "Hiragana Dojo Practice Kiosk App",
+  "description": "Hiragana Dojo App",
   "main": "main.js",
   "author": "Versatile Foundation",
   "license": "MIT",
