@@ -3,6 +3,13 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 
+// Set to true once the user has actually chosen to exit (via the
+// File > Exit menu / Alt+F4, or an update is about to install).
+// The window is created with closable:false so the OS-level close
+// (and therefore app.quit()) is normally blocked; this flag is how
+// we tell the 'close' handler below "no really, let it go".
+let isQuitting = false;
+
 // ============================================================
 // APP CONFIGURATION
 // ============================================================
@@ -31,6 +38,29 @@ if (!disableUpdates) {
 }
 
 // ============================================================
+// QUIT
+// ============================================================
+//
+// closable:false / minimizable:false / kiosk mode all fight a
+// plain app.quit(), because app.quit() still tries to close each
+// BrowserWindow first, and closable:false blocks that. This is
+// what made "File > Exit" appear to do nothing. quitApp() marks
+// intent to quit, destroys the window directly (bypassing the
+// blocked close path), then force-exits the app.
+//
+// ============================================================
+
+function quitApp() {
+  isQuitting = true;
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
+
+  app.exit(0);
+}
+
+// ============================================================
 // CREATE WINDOW
 // ============================================================
 
@@ -51,7 +81,7 @@ function createWindow() {
           accelerator: 'Alt+F4',
 
           click: () => {
-            app.quit();
+            quitApp();
           }
         }
       ]
@@ -71,14 +101,19 @@ function createWindow() {
     // ========================================================
     // FULLSCREEN
     // ========================================================
+    //
+    // NOTE: We deliberately do NOT use kiosk:true here. Electron's
+    // kiosk mode forces the frame/menu bar to hide on Windows even
+    // when frame:true is set - that contradiction is what made the
+    // File menu (and therefore File > Exit) unreachable once the
+    // window went fullscreen. Plain fullscreen + the restrictions
+    // below gets the same locked-down feel while keeping the menu
+    // usable. fullscreenable is left true (default) since setting
+    // it false while also setting fullscreen:true is contradictory
+    // and can stop setFullScreen() from taking effect reliably.
+    // ========================================================
 
     fullscreen: true,
-
-    // ========================================================
-    // KIOSK
-    // ========================================================
-
-    kiosk: true,
 
     // ========================================================
     // WINDOW RESTRICTIONS
@@ -93,8 +128,6 @@ function createWindow() {
     resizable: false,
 
     movable: false,
-
-    fullscreenable: false,
 
     // Keep frame so File menu remains available.
     frame: true,
@@ -119,22 +152,20 @@ function createWindow() {
   });
 
   // ==========================================================
-  // FORCE FULLSCREEN
+  // READY
   // ==========================================================
 
-  mainWindow.setFullScreen(true);
+  mainWindow.once('ready-to-show', () => {
 
-  // ==========================================================
-  // FORCE KIOSK
-  // ==========================================================
+    if (!mainWindow.isDestroyed()) {
 
-  mainWindow.setKiosk(true);
+      mainWindow.setFullScreen(true);
 
-  // ==========================================================
-  // ALWAYS ON TOP
-  // ==========================================================
+      mainWindow.setAlwaysOnTop(true);
 
-  mainWindow.setAlwaysOnTop(true);
+      mainWindow.focus();
+    }
+  });
 
   // ==========================================================
   // MENU BAR
@@ -153,22 +184,47 @@ function createWindow() {
   );
 
   // ==========================================================
+  // RE-ASSERT LOCKDOWN (only when actually needed)
+  // ==========================================================
+  //
+  // Previously this was also triggered on every 'focus' event,
+  // which fired setKiosk()/setFullScreen() constantly - even when
+  // the window was already fullscreen - and caused visible
+  // flicker/stutter on Windows as it fought the OS window manager.
+  // Now it only fires from the specific "we actually left that
+  // state" events below, and only calls the setters when the
+  // window isn't already in the desired state.
+  //
+  // ==========================================================
+
+  function reassertLockdown() {
+
+    if (isQuitting || mainWindow.isDestroyed()) {
+      return;
+    }
+
+    if (!mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(true);
+    }
+
+    mainWindow.focus();
+  }
+
+  // ==========================================================
   // PREVENT MINIMIZING
   // ==========================================================
 
   mainWindow.on('minimize', (event) => {
 
+    if (isQuitting) {
+      return;
+    }
+
     event.preventDefault();
 
     if (!mainWindow.isDestroyed()) {
-
       mainWindow.restore();
-
-      mainWindow.setKiosk(true);
-
-      mainWindow.setFullScreen(true);
-
-      mainWindow.focus();
+      reassertLockdown();
     }
   });
 
@@ -176,63 +232,30 @@ function createWindow() {
   // PREVENT LEAVING FULLSCREEN
   // ==========================================================
 
-  mainWindow.on('leave-full-screen', () => {
-
-    if (!mainWindow.isDestroyed()) {
-
-      mainWindow.setKiosk(true);
-
-      mainWindow.setFullScreen(true);
-
-      mainWindow.focus();
-    }
-  });
+  mainWindow.on('leave-full-screen', reassertLockdown);
 
   // ==========================================================
   // PREVENT LEAVING HTML FULLSCREEN
   // ==========================================================
 
-  mainWindow.on('leave-html-full-screen', () => {
-
-    if (!mainWindow.isDestroyed()) {
-
-      mainWindow.setKiosk(true);
-
-      mainWindow.setFullScreen(true);
-
-      mainWindow.focus();
-    }
-  });
+  mainWindow.on('leave-html-full-screen', reassertLockdown);
 
   // ==========================================================
-  // READY
+  // BLOCK NATIVE CLOSE UNLESS WE'RE ACTUALLY QUITTING
+  // ==========================================================
+  //
+  // closable:false already hides/disables the native close button
+  // on most platforms, but this is the belt-and-suspenders version:
+  // if anything ever fires a close (Alt+F4 caught by the OS before
+  // our accelerator, an updater path, etc.) and we did NOT set
+  // isQuitting via quitApp(), swallow it so kiosk lockdown holds.
+  //
   // ==========================================================
 
-  mainWindow.once('ready-to-show', () => {
+  mainWindow.on('close', (event) => {
 
-    if (!mainWindow.isDestroyed()) {
-
-      mainWindow.setKiosk(true);
-
-      mainWindow.setFullScreen(true);
-
-      mainWindow.setAlwaysOnTop(true);
-
-      mainWindow.focus();
-    }
-  });
-
-  // ==========================================================
-  // WINDOW FOCUS
-  // ==========================================================
-
-  mainWindow.on('focus', () => {
-
-    if (!mainWindow.isDestroyed()) {
-
-      mainWindow.setKiosk(true);
-
-      mainWindow.setFullScreen(true);
+    if (!isQuitting) {
+      event.preventDefault();
     }
   });
 
@@ -294,6 +317,8 @@ autoUpdater.on('update-downloaded', () => {
 
     if (result.response === 0) {
 
+      isQuitting = true;
+
       autoUpdater.quitAndInstall();
     }
   });
@@ -304,7 +329,6 @@ autoUpdater.on('update-downloaded', () => {
 // ============================================================
 
 autoUpdater.on('error', (error) => {
-
   console.error(
     'AutoUpdater Error:',
     error
@@ -312,21 +336,18 @@ autoUpdater.on('error', (error) => {
 });
 
 autoUpdater.on('checking-for-update', () => {
-
   console.log(
     'Checking for updates...'
   );
 });
 
 autoUpdater.on('update-available', () => {
-
   console.log(
     'Update available.'
   );
 });
 
 autoUpdater.on('update-not-available', () => {
-
   console.log(
     'No updates available.'
   );
@@ -337,6 +358,5 @@ autoUpdater.on('update-not-available', () => {
 // ============================================================
 
 app.on('window-all-closed', () => {
-
   app.quit();
 });
