@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, Menu } = require('electron');
+const { app, BrowserWindow, dialog, Menu, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -53,11 +53,51 @@ if (!disableUpdates) {
 function quitApp() {
   isQuitting = true;
 
+  globalShortcut.unregisterAll();
+
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.destroy();
   }
 
   app.exit(0);
+}
+
+// ============================================================
+// BLOCK VIRTUAL DESKTOP SWITCHING
+// ============================================================
+//
+// Ctrl+Win+Left / Ctrl+Win+Right normally switch Windows virtual
+// desktops, which would let someone swipe away from the locked-down
+// window. Registering them as global shortcuts with a no-op handler
+// claims the hotkey system-wide so Windows never acts on it while
+// the app is running. Released again in quitApp()/before-quit so we
+// don't leave a stray hotkey registration behind after exit.
+//
+// ============================================================
+
+function blockVirtualDesktopSwitching() {
+
+  const blockedAccelerators = [
+    'Control+Super+Left',
+    'Control+Super+Right'
+  ];
+
+  blockedAccelerators.forEach((accelerator) => {
+
+    try {
+
+      globalShortcut.register(accelerator, () => {
+        // Intentionally empty: swallow the key combo.
+      });
+
+    } catch (error) {
+
+      console.error(
+        `Unable to block ${accelerator}:`,
+        error
+      );
+    }
+  });
 }
 
 // ============================================================
@@ -285,6 +325,37 @@ function createWindow() {
 
 app.whenReady().then(() => {
 
+  blockVirtualDesktopSwitching();
+
+  const choice = dialog.showMessageBoxSync({
+
+    type: 'warning',
+
+    title: 'Before You Continue',
+
+    message:
+      'Please close all other applications before continuing.',
+
+    detail:
+      'Hiragana Dojo App runs in a locked, full-screen mode. ' +
+      'Closing other apps first avoids anything being left open ' +
+      'underneath it.',
+
+    buttons: [
+      'Continue',
+      'Cancel'
+    ],
+
+    defaultId: 0,
+
+    cancelId: 1
+  });
+
+  if (choice === 1) {
+    app.exit(0);
+    return;
+  }
+
   createWindow();
 
 });
@@ -358,5 +429,6 @@ autoUpdater.on('update-not-available', () => {
 // ============================================================
 
 app.on('window-all-closed', () => {
+  globalShortcut.unregisterAll();
   app.quit();
 });
