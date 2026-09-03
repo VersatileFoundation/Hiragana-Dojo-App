@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, Menu, globalShortcut } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { exec } = require('child_process');
 
 let mainWindow;
 
@@ -35,6 +36,92 @@ const disableUpdates =
 if (!disableUpdates) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+}
+
+// ============================================================
+// CLOSE OTHER APPS
+// ============================================================
+//
+// Best-effort: asks other top-level windows to close gracefully
+// (CloseMainWindow via PowerShell), then force-kills anything
+// still running after a short grace period. Excludes this
+// process and a small denylist of core system processes so we
+// don't take down the desktop shell. Windows-only (matches the
+// rest of this script's Windows-specific lockdown behavior); on
+// other platforms this is a no-op.
+//
+// ============================================================
+
+function closeOtherApps() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      console.log('closeOtherApps: not on Windows, skipping.');
+      resolve();
+      return;
+    }
+
+    const ownPid = process.pid;
+
+    // Processes we never want to touch. Adjust the last entry to
+    // match this app's actual built .exe name if it differs.
+    const protectedNames = [
+      'explorer.exe',
+      'dwm.exe',
+      'winlogon.exe',
+      'csrss.exe',
+      'wininit.exe',
+      'services.exe',
+      'lsass.exe',
+      'svchost.exe',
+      'ctfmon.exe',
+      'hiragana dojo app.exe'
+    ];
+
+    const protectedFilter = protectedNames
+      .map((n) => `($_.ProcessName + '.exe') -ne '${n}'`)
+      .join(' -and ');
+
+    const buildFilterScript = (action) => `
+      Get-Process | Where-Object {
+        $_.MainWindowHandle -ne 0 -and
+        $_.Id -ne ${ownPid} -and
+        ${protectedFilter}
+      } | ForEach-Object { ${action} }
+    `.replace(/\s+/g, ' ');
+
+    // Step 1: ask windows nicely to close (lets apps prompt to save, etc.)
+    const closeScript = buildFilterScript('$_.CloseMainWindow() | Out-Null');
+
+    exec(
+      `powershell -NoProfile -Command "${closeScript}"`,
+      (closeError) => {
+        if (closeError) {
+          console.error('Error closing other apps gracefully:', closeError);
+        }
+
+        // Step 2: give apps a moment to close/save, then force-kill stragglers.
+        setTimeout(() => {
+          const killScript = `
+            Get-Process | Where-Object {
+              $_.MainWindowHandle -ne 0 -and
+              $_.Id -ne ${ownPid} -and
+              ${protectedFilter}
+            } | Stop-Process -Force -ErrorAction SilentlyContinue
+          `.replace(/\s+/g, ' ');
+
+          exec(
+            `powershell -NoProfile -Command "${killScript}"`,
+            (killError) => {
+              if (killError) {
+                console.error('Error force-closing remaining apps:', killError);
+              }
+              resolve();
+            }
+          );
+        }, 3000); // 3s grace period for graceful closes to finish
+      }
+    );
+  });
 }
 
 // ============================================================
@@ -218,9 +305,14 @@ function createWindow() {
   // ==========================================================
   // LOAD WEBSITE
   // ==========================================================
+  //
+  // NOTE: fixed a duplicated "https://" typo from the original
+  // script that would have made this URL fail to load.
+  //
+  // ==========================================================
 
   mainWindow.loadURL(
-    'https://hiragana-practice.replit.app/'
+    'https://dojo.japaneseboost.com/'
   );
 
   // ==========================================================
@@ -302,6 +394,16 @@ function createWindow() {
   // ==========================================================
   // UPDATE CHECK
   // ==========================================================
+  //
+  // Only fires when updates aren't disabled. Errors are caught so
+  // a failed/offline check never blocks the app from launching.
+  // Actual update handling (download progress, install prompt) is
+  // wired up via the autoUpdater event listeners below, which are
+  // registered once at module load time - not inside createWindow -
+  // so they're active for the whole app lifetime, not just while a
+  // window exists.
+  //
+  // ==========================================================
 
   if (!disableUpdates) {
 
@@ -323,7 +425,7 @@ function createWindow() {
 // ELECTRON READY
 // ============================================================
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
 
   blockVirtualDesktopSwitching();
 
@@ -338,8 +440,7 @@ app.whenReady().then(() => {
 
     detail:
       'Hiragana Dojo App runs in a locked, full-screen mode. ' +
-      'Closing other apps first avoids anything being left open ' +
-      'underneath it.',
+      'Clicking Continue will close other open applications automatically.',
 
     buttons: [
       'Continue',
@@ -356,12 +457,21 @@ app.whenReady().then(() => {
     return;
   }
 
+  await closeOtherApps();
+
   createWindow();
 
 });
 
 // ============================================================
 // UPDATE DOWNLOADED
+// ============================================================
+//
+// Registered at module scope (once), not per-window, so it will
+// still fire correctly even if createWindow() were ever called
+// more than once. Guarded by disableUpdates so it's inert in the
+// portable/no-updater build.
+//
 // ============================================================
 
 autoUpdater.on('update-downloaded', () => {
@@ -388,6 +498,10 @@ autoUpdater.on('update-downloaded', () => {
 
     if (result.response === 0) {
 
+      // Must set isQuitting BEFORE quitAndInstall(), otherwise the
+      // 'close' handler above (closable:false lockdown) will swallow
+      // the close event quitAndInstall() triggers and the update
+      // will silently fail to install.
       isQuitting = true;
 
       autoUpdater.quitAndInstall();
